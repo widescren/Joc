@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	package="flm.b4a.spaceenemies"
+	android:versionCode="1"
+	android:versionName=""
+	android:installLocation="internalOnly">
+	
+	<uses-sdk android:minSdkVersion="7" android:targetSdkVersion="11"/>
+	<supports-screens android:largeScreens="true" 
+	    android:normalScreens="true" 
+	    android:smallScreens="true" 
+	    android:anyDensity="true"/>
+	<application
+		android:icon="@drawable/icon"
+		android:label="Space Wars">
+		<activity
+			android:windowSoftInputMode="stateHidden"
+			android:launchMode="singleTop"
+			android:name=".main"
+			android:label="Space Wars"
+			android:screenOrientation="landscape"
+			android:hardwareAccelerated="true">
+			<intent-filter>
+			   <action android:name="android.intent.action.MAIN" />
+			   <category android:name="android.intent.category.LAUNCHER" />
+			</intent-filter>
+			
+		</activity>
+	</application>
+</manifest>

@@ -1,0 +1,485 @@
+﻿Version=3.2
+IconFile=
+NumberOfModules=0
+Package=flm.b4a.spaceenemies
+DoNotOverwriteManifest=False
+ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: http://www.basic4ppc.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="7" android:targetSdkVersion="11"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>~\n~)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~'End of default text.~\n~SetActivityAttribute(Main, android:hardwareAccelerated, "true")~\n~
+UserTypesHint=typHero,typEnemy,typWave,typBomb,typLaser
+NumberOfFiles=0
+NumberOfLibraries=5
+Library1=acceleratedsurface
+Library2=animation
+Library3=audio
+Library4=core
+Library5=phone
+@EndOfDesignText@
+#Region  Project Attributes 
+	#ApplicationLabel: Space Wars
+	#VersionCode: 1
+	#VersionName: 
+	'SupportedOrientations possible values: unspecified, landscape or portrait.
+	#SupportedOrientations: landscape
+	#CanInstallToExternalStorage: False
+#End Region
+
+#Region  Activity Attributes 
+	#FullScreen: false
+	#IncludeTitle: true
+#End Region
+
+Sub Process_Globals
+	Type typHero(X As Float, Y As Float, ShipLeft As Int, ShipRight As Int, ShipCenter As Int, ShipTop As Int, _
+	             FireWait As Long, Move As Short, DyingState As Short)
+	Type typEnemy(OffsetX As Int, OffsetY As Int, State As Byte, FireWait As Long)
+	Type typWave(Count As Int, X As Float, Y As Float, Speed As Float, FireWait As Long)
+	Type typBomb(X As Float, Y As Float, Angle As Float, InverseRotation As Boolean)
+	Type typLaser(X As Float, Y As Float)
+End Sub
+
+Sub Globals
+	Dim AcSf As AcceleratedSurface
+	Dim AcSfText As AcceleratedSurface
+	Dim IU As AS_ImageUtils
+
+	Dim TextToShow As Boolean
+	Dim Text As String
+	Dim MaxTextSize As Int
+	Dim TextObj As AS_Text
+
+	Dim Score As Int
+	Dim ScoreFontSize As Int
+	Dim ScoreHeight As Int
+
+	Dim Hero As typHero
+	Dim bmpTux, bmpMiniTux As Bitmap
+	Dim ShipPath As Path
+	Dim Lives As Byte
+
+	Dim Enemies As List
+	Dim Wave As typWave
+	Dim bmpDroid, bmpDroid2 As Bitmap
+	Dim WaitBeforeDropping As Int
+	Dim WaitBeforeNextBomb As Int
+
+	Dim Bombs As List
+	Dim BombSpeed As Float
+	Dim BombRotationSpeed As Float
+	Dim bmpBomb As Bitmap
+
+	Dim LaserShots As List
+	Dim LaserSpeed As Float
+	Dim LaserShotSize As Int
+	Dim WaitBeforeNextShot As Int
+
+	Dim bmpALeft, bmpARight As Bitmap
+	Dim BitmapSize As Float
+	Dim Elapsed As Long
+
+	Dim SP As SoundPool
+	Dim LaserSound As Int
+	Dim HitSound As Int
+End Sub
+
+Sub Activity_Create(FirstTime As Boolean)
+	'Creates the accelerated surface
+	Activity.Title = "Space Wars - Bermz ISWare Software Solutions"
+	AcSf.Initialize("AcSf", True)
+	AcSf.Color = Colors.Black
+	Activity.AddView(AcSf, 0, 0, 100%x, 100%y)
+
+	'Loads the enemies bitmaps
+	BitmapSize = Sqrt(Power(4%x, 2) + Power(4%y, 2))
+	bmpDroid = IU.LoadScaledBitmap(File.DirAssets, "alien.png", BitmapSize, BitmapSize * 1.2, False)
+	bmpDroid2 = IU.LoadScaledBitmap(File.DirAssets, "space_enemies/alien.png", BitmapSize, BitmapSize * 1.2, False)
+
+	'Loads the bomb bitmap
+	bmpBomb = IU.LoadScaledBitmap(File.DirAssets, "space_enemies/bomb.png", BitmapSize / 2, BitmapSize / 2, False)
+
+	'Loads the hero bitmaps
+	bmpTux = IU.LoadScaledBitmap(File.DirAssets, "space_enemies/tux.png", BitmapSize, BitmapSize, False)
+	bmpMiniTux = IU.LoadScaledBitmap(File.DirAssets, "space_enemies/tux.png", BitmapSize * 0.7, BitmapSize * 0.7, False)
+
+	'Loads the arrow bitmaps
+	Dim ArrowSize As Int = Min(Max(50dip, BitmapSize * 1.2), 70dip)
+	bmpALeft = IU.LoadScaledBitmap(File.DirAssets, "space_enemies/arrow_left.jpg", ArrowSize, ArrowSize, False)
+	bmpARight = IU.LoadScaledBitmap(File.DirAssets, "space_enemies/arrow_right.jpg", ArrowSize, ArrowSize, False)
+
+	'Loads sounds
+	SP.Initialize(8)
+	LaserSound = SP.Load(File.DirAssets, "space_enemies/laser.ogg")
+	HitSound = SP.Load(File.DirAssets, "space_enemies/hit.ogg")
+
+	'Creates the enemies wave (4 x 10)
+	WaitBeforeNextBomb = 500 'milliseconds
+	WaitBeforeDropping = 500 'milliseconds
+	Wave.Count = 0
+	Wave.FireWait = WaitBeforeNextBomb
+	NextWave
+
+	'Initializes the bombs and laser shots
+	Bombs.Initialize
+	BombSpeed = 35%y
+	BombRotationSpeed = 2%x
+	LaserShots.Initialize
+	LaserSpeed = 40%y
+	LaserShotSize = 4%y
+
+	'Initializes the hero
+	Lives = 3
+	Hero.X = 50%x - (bmpTux.Width / 2)
+	Hero.Y = 100%y - bmpTux.Height
+	Hero.ShipLeft = Hero.X - 1%x
+	Hero.ShipRight = Hero.X + bmpTux.Width + 1%x
+	Hero.ShipCenter = (Hero.ShipLeft + Hero.ShipRight) / 2
+	Hero.ShipTop = 100%y - (Hero.ShipRight - Hero.ShipLeft)
+	Hero.FireWait = 0
+	Hero.Move = 0 '0 = Idle, -1 = Moving to the left, 1 = Moving to the right
+	Hero.DyingState = 0
+	WaitBeforeNextShot = 500 'milliseconds
+
+	'Computes the font size and text height of the score
+	Dim FontScale As Float = (100%x + 100%y) / (320dip + 480dip)
+	ScoreFontSize = 18 * FontScale
+	ScoreHeight = 17dip * FontScale
+
+	'Creates a text object with a curved path
+	Dim BaseLine As Int = 52%y
+	Dim Pth As AS_Path
+	Pth.Initialize(0, BaseLine + 20%y)
+	Pth.CubicTo(35%x, BaseLine, 65%x, BaseLine - 20%y, 100%x, BaseLine)
+	TextObj.CreateText(Typeface.DEFAULT_BOLD, True).SetColor(Colors.RGB(255, 100, 0))
+	TextObj.SetStyle(TextObj.STYLE_STROKE, 0.8%x).SetPath(Pth)
+
+	'Animates the title in a separate accelerated surface (the hardware acceleration is disabled under
+	'Honeycomb and ICS because these versions do not implement the accelerated variant of TextOnPath)
+	Dim P As Phone
+	Dim Honeycomb_ICS As Boolean = (P.SdkVersion >= 11 AND P.SdkVersion <= 15)
+	AcSfText.Initialize("AcSfText", Not(Honeycomb_ICS))
+	AcSfText.Color = Colors.Transparent
+	Activity.AddView(AcSfText, 0, 0, 100%x, 100%y)
+	AnimateText("SPACE WARS")
+End Sub
+
+Sub NextWave
+	'Creates the enemies wave (4 x 10)
+	Enemies.Initialize
+	For X = 0 To 9
+		For Y = 0 To 3
+			Dim Enemy As typEnemy
+			Enemy.OffsetX = X * BitmapSize * 1.2
+			Enemy.OffsetY = Y * BitmapSize * 1.3
+			Enemy.State = 0 '0 = Idle, 1 = Firing, 2+ = Dying
+			Enemy.FireWait = WaitBeforeDropping
+			Enemies.Add(Enemy)
+		Next
+	Next
+	Wave.X = 1%x
+	Wave.Y = 1%y
+	Wave.Speed = 5%x + (1.5%x * Wave.Count)
+End Sub
+
+Sub AnimateText(Text2Display As String)
+	'Computes the maximum font size for the specified text
+	Text = Text2Display
+	For i = 30 To 200
+		MaxTextSize = i
+		TextObj.SetSize(MaxTextSize)
+		If TextObj.MeasureStringWidth(Text) > 80%x Then Exit
+	Next
+	TextToShow = True
+	AcSfText.Visible = True
+
+	'Starts the text animation
+	Dim AnimText As Animation
+	AnimText.InitializeScaleCenter("AnimText", 0, 0, 1, 1, AcSfText)
+	AnimText.Duration = 1500
+	If Lives > 0 Then
+		AnimText.RepeatMode = AnimText.REPEAT_REVERSE
+		AnimText.RepeatCount = 1
+	Else 'Game over
+		AnimText.RepeatCount = 0
+	End If
+	AnimText.Start(AcSfText)
+End Sub
+
+Sub Activity_Resume
+	AcSf.StartRegularUpdateAndDraw(16)
+End Sub
+
+Sub Activity_Pause (UserClosed As Boolean)
+	AcSf.StopRegularDraw
+	If UserClosed Then SP.Release
+End Sub
+
+Sub CollisionWithHero(Left As Int, Right As Int, Bottom As Int) As Boolean
+	'Checks whether the bomb collides with the hero
+	If Lives > 0 Then
+		If Hero.ShipRight <= Left OR Hero.ShipLeft >= Right OR Bottom < Hero.ShipTop Then
+			Return False
+		Else
+			'The ship is a triangle, so a little bit of computation is required
+			If Right < Hero.ShipCenter Then
+				Return (Bottom - Hero.ShipTop - Bit.ShiftLeft(Hero.ShipCenter - Right, 1) > 0)
+			Else If Left > Hero.ShipCenter Then
+				Return (Bottom - Hero.ShipTop - Bit.ShiftLeft(Left - Hero.ShipCenter, 1) > 0)
+			Else
+				Return True
+			End If
+		End If
+	End If
+End Sub
+
+Sub CollisionWithEnemy(Left As Int, Right As Int, Top As Int, Bottom As Int) As Boolean
+	'Checks whether the laser shot collides with an enemy
+	Dim X, Y As Int
+	For i = Enemies.Size - 1 To 0 Step -1
+		Dim Enemy As typEnemy
+		Enemy = Enemies.Get(i)
+		If Enemy.State < 2 Then
+			X = Wave.X + Enemy.OffsetX
+			Y = Wave.Y + Enemy.OffsetY
+			If Left >= X AND X + bmpDroid.Width >= Right AND Top <= Y + bmpDroid.Height AND Bottom >= Y Then
+				Enemy.State = 2 'First stage of death
+				Return True
+			End If
+		End If
+	Next
+	Return False
+End Sub
+
+Sub AcSf_Update(ElapsedTime As Long)
+	'No update until the text is gone
+	If TextToShow Then Return
+
+	'The elapsed time cannot be bigger than 3x16ms (20fps)
+	'If that happens, the game is slowed down to avoid a sudden jump
+	Elapsed = Min(ElapsedTime, 3 * 16)
+
+	'Computes the new position of the hero's ship
+	If Hero.Move <> 0 AND Hero.DyingState = 0 Then
+		Hero.X = Min(Max(bmpALeft.Width + bmpARight.Width + 1%x, _
+		                 Hero.X + (Hero.Move * 0.5%x)), 99%x - bmpTux.Width)
+		Hero.ShipLeft = Hero.X - 1%x
+		Hero.ShipRight = Hero.X + bmpTux.Width + 1%x
+		Hero.ShipCenter = Bit.ShiftRight(Hero.ShipLeft + Hero.ShipRight, 1)
+	End If
+
+	'Computes the new position of the enemies wave
+	Dim Secs As Double = Elapsed / 1000
+	Wave.X = Wave.X + (Wave.Speed * Secs)
+	Dim EdgeReached As Boolean = False
+	If Wave.Speed > 0 Then
+		EdgeReached = (Wave.X >= 95%x - (9 * BitmapSize * 1.2) - BitmapSize)
+	Else
+		EdgeReached = (Wave.X <= 5%x)
+	End If
+	If EdgeReached Then
+		'The wave has reached an edge -> it goes in the opposite direction and goes down a bit
+		Wave.Speed = -Wave.Speed
+		Wave.Y = Wave.Y + 2%y
+	End If
+
+	'Time for shooting?
+	Wave.FireWait = Wave.FireWait - Elapsed
+	If Wave.FireWait <= 0 Then
+		'The shooter is selected randomly
+		Dim Enemy As typEnemy
+		Enemy = Enemies.Get(Rnd(0, Enemies.Size))
+		If Enemy.State <> 0 Then
+			Enemy = Enemies.Get(Rnd(0, Enemies.Size))
+		End If
+		If Enemy.State = 0 Then
+			Enemy.State = 1 'Fire!
+			Wave.FireWait = WaitBeforeNextBomb
+		End If
+	End If
+	For i = 0 To Enemies.Size - 1
+		Dim Enemy As typEnemy
+		Enemy = Enemies.Get(i)
+		Dim Bottom As Int = Wave.Y + Enemy.OffsetY + bmpDroid.Height
+		If CollisionWithHero(Wave.X + Enemy.OffsetX, Wave.X + Enemy.OffsetX + bmpDroid.Width, Bottom) _
+		   OR Bottom >= 100%y Then
+			'Collision or landing -> Instant death!
+			Hero.DyingState = 1
+			Lives = 0
+			AnimateText("GAME OVER")
+		End If
+		If Enemy.State = 1 Then
+			'The enemy droid is preparing its bomb
+			Enemy.FireWait = Enemy.FireWait - Elapsed
+			If Enemy.FireWait <= 0 Then
+				'Fire!
+				Enemy.State = 0 'Idle
+				Enemy.FireWait = WaitBeforeDropping
+				Dim Bomb As typBomb
+				Bomb.X = Wave.X + Enemy.OffsetX + Bit.ShiftRight(bmpDroid.Width - bmpBomb.Width, 1)
+				Bomb.Y = Wave.Y + Enemy.OffsetY + Bit.ShiftRight(bmpDroid.Height, 1)
+				Bomb.InverseRotation = (Wave.Speed > 0)
+				If Bomb.InverseRotation Then
+					Bomb.Angle = Rnd(0, 45)
+				Else
+					Bomb.Angle = Rnd(-45, 0)
+				End If
+				Bombs.Add(Bomb)
+			End If
+		End If
+	Next
+
+	'Computes the new position and new angle of bombs
+	For i = Bombs.Size - 1 To 0 Step -1
+		Dim Bomb As typBomb
+		Bomb = Bombs.Get(i)
+		If CollisionWithHero(Bomb.X, Bomb.X + bmpBomb.Width, Bomb.Y + Bit.ShiftRight(bmpBomb.Height, 1)) Then
+			'Hit!
+			Hero.DyingState = 1
+			Lives = Lives - 1
+			SP.Play(HitSound, 1 - (Bomb.X / 100%x), Bomb.X / 100%x, 1, 0, 0.7)
+			If Lives = 0 Then
+				AnimateText("GAME OVER")
+			Else
+				Bombs.RemoveAt(i)
+			End If
+		Else
+			Bomb.Y = Bomb.Y + (Secs * BombSpeed)
+			If Bomb.InverseRotation Then
+				Bomb.Angle = Bomb.Angle + (Secs * BombRotationSpeed)
+			Else
+				Bomb.Angle = Bomb.Angle - (Secs * BombRotationSpeed)
+			End If
+			If Bomb.Y > 100%y Then Bombs.RemoveAt(i)
+		End If
+	Next
+
+	'Computes the new position of laser shots
+	Hero.FireWait = Hero.FireWait - Elapsed
+	For i = LaserShots.Size - 1 To 0 Step -1
+		Dim LaserShot As typLaser
+		LaserShot = LaserShots.Get(i)
+		If CollisionWithEnemy(LaserShot.X, LaserShot.X + 0.5%x, LaserShot.Y, LaserShot.Y + LaserShotSize) Then
+			'Hit!
+			SP.Play(HitSound, 1 - (LaserShot.X / 100%x), LaserShot.X / 100%x, 1, 0, 1)
+			LaserShots.RemoveAt(i)
+			Score = Score + 10 + (10 * Wave.Count)
+		Else
+			LaserShot.Y = LaserShot.Y - (Secs * LaserSpeed)
+			If LaserShot.Y < -LaserShotSize Then LaserShots.RemoveAt(i)
+		End If
+	Next
+End Sub
+
+Sub AcSf_Draw(AC As AS_Canvas)
+	'Draws the score
+	AC.DrawText(Score, 0, ScoreHeight, Typeface.DEFAULT, ScoreFontSize, Colors.White, AC.ALIGN_LEFT)
+
+	'Draws the remaining lives
+	For i = 1 To Lives
+		AC.DrawBitmapAt(bmpMiniTux, 100%x - (i * bmpMiniTux.Width * 1.05), 0)
+	Next
+
+	'Draws the hero's ship
+	ShipPath.Initialize(Hero.ShipCenter, Hero.ShipTop)
+	ShipPath.LineTo(Hero.ShipLeft, Hero.Y + bmpTux.Height)
+	ShipPath.LineTo(Hero.ShipRight, Hero.Y + bmpTux.Height)
+	If Hero.DyingState = 0 Then
+		AC.DrawPath(ShipPath, Colors.Yellow, True, 0, True)
+		AC.DrawBitmapAt(bmpTux, Hero.X, Hero.Y)
+	Else
+		'The hero has been hit -> the ship becomes red
+		AC.DrawPath(ShipPath, Colors.Red, True, 0, True)
+		AC.DrawBitmapAt(IU.AlterColors(bmpTux, 128, 0, Hero.DyingState), Hero.X, Hero.Y)
+		If Lives > 0 Then
+			Hero.DyingState = Hero.DyingState + 1
+			If Hero.DyingState > 12 Then Hero.DyingState = 0
+		End If
+	End If
+
+	'Draws the enemies
+	For i = Enemies.Size - 1 To 0 Step -1
+		Dim Enemy As typEnemy
+		Enemy = Enemies.Get(i)
+		If Enemy.State = 0 Then
+			AC.DrawBitmapAt(bmpDroid, Wave.X + Enemy.OffsetX, Wave.Y + Enemy.OffsetY)
+		Else If Enemy.State = 1 Then
+			AC.DrawBitmapAt(bmpDroid2, Wave.X + Enemy.OffsetX, Wave.Y + Enemy.OffsetY)
+		Else
+			'The enemy droid has been hit -> it becomes blue and vanishes
+			AC.DrawBitmapAt(IU.AlterColors(bmpDroid, 255 - (Enemy.State * 10), 100, 2), _
+			                Wave.X + Enemy.OffsetX, Wave.Y + Enemy.OffsetY)
+			Enemy.State = Enemy.State + 1
+			If Enemy.State > 20 Then
+				Enemies.RemoveAt(i)
+				If Enemies.Size = 0 Then
+					'Level completed -> next wave
+					Wave.Count = Wave.Count + 1
+					If Wave.Count Mod 3 = 0 Then Lives = Lives + 1 'One extra life every 3 levels
+					NextWave
+					Bombs.Initialize
+					LaserShots.Initialize
+					AnimateText("NEXT WAVE")
+				End If
+			End If
+		End If
+	Next
+
+	'Draws the falling apples
+	Dim Bomb As typBomb
+	For i = 0 To Bombs.Size - 1
+		Bomb = Bombs.Get(i)
+		AC.MatrixSetRotate2(Bomb.Angle, Bit.ShiftRight(bmpBomb.Width, 1), Bit.ShiftRight(bmpBomb.Height, 1))
+		AC.DrawBitmapWithMatrixAt(bmpBomb, Bomb.X, Bomb.Y, True)
+	Next
+
+	'Draws the laser shots
+	Dim LaserShot As typLaser, R As Rect
+	For i = 0 To LaserShots.Size - 1
+		LaserShot = LaserShots.Get(i)
+		R.Initialize(LaserShot.X, LaserShot.Y, LaserShot.X + 0.5%x, LaserShot.Y + LaserShotSize)
+		AC.DrawRect(R, Colors.Cyan, True, 0, False)
+	Next
+
+	'Draws the arrows
+	AC.DrawBitmapAt(bmpALeft, 0, 100%y - bmpALeft.Height)
+	AC.DrawBitmapAt(bmpARight, bmpALeft.Width, 100%y - bmpARight.Height)
+End Sub
+
+Sub AcSf_Touch(Action As Int, X As Int, Y As Int, Event As Object)
+	If Lives > 0 AND Not(TextToShow) Then
+		'If an arrow is touched, the ship moves in the arrow direction
+		If Action = 0 OR Action = 2 Then
+			If X <= bmpALeft.Width Then
+				Hero.Move = -1
+			Else If X <= bmpALeft.Width + bmpARight.Width Then
+				Hero.Move = 1
+			Else
+				'Any action outside the arrows fires a laser shot
+				If Hero.FireWait <= 0 Then
+					Dim LaserShot As typLaser
+					LaserShot.X = Hero.X + Bit.ShiftRight(bmpTux.Width, 1) - 0.25%x
+					LaserShot.Y = Hero.Y - 1.5%y - LaserShotSize
+					LaserShots.Add(LaserShot)
+					Hero.FireWait = WaitBeforeNextShot
+					SP.Play(LaserSound, 1 - (LaserShot.X / 100%x), LaserShot.X / 100%x, 1, 0, 1)
+				End If
+			End If
+		Else If Action = 1 Then
+			Hero.Move = 0
+		End If
+	End If
+End Sub
+
+Sub AcSfText_Draw(AC As AS_Canvas)
+	'Draws the text
+	If TextObj.IsInitialized Then
+		AC.DrawTextObject(TextObj, Text, 0, 0, AC.ALIGN_CENTER)
+	End If
+End Sub
+
+Sub AnimText_AnimationEnd
+	'Hides the accelerated surface used to display texts
+	If Lives > 0 Then
+		AcSfText.Visible = False
+		TextToShow = False
+	Else 'Game over
+		AcSf.StopRegularDraw
+	End If
+End Sub
